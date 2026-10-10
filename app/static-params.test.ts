@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import shop from "@/test/fixtures/e-shop.json";
 import journal from "@/test/fixtures/journal.json";
 
-// At build time Next.js runs generateStaticParams with no request, and
-// draftMode() throws there. Calling it would only fail on `next build`
-// (Vercel), never in a dev server, so this test makes it fail here instead.
+// Next.js runs generateStaticParams with no request (in build and in dev), and
+// draftMode() throws there. That only shows up when Next generates static
+// params, never in unit tests unless mocked like here.
 vi.mock("next/headers", () => ({
   draftMode: () => { throw new Error("draftMode() used inside generateStaticParams"); },
   cookies: () => { throw new Error("cookies() used inside generateStaticParams"); },

@@ -172,6 +172,21 @@ describe("where reads go", () => {
     }
   });
 
+  it("an explicit preview Source sends both coffee detail reads to the sandbox, uncached and untagged", async () => {
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true, status: 200, json: async () => (url.includes("/e/shop") ? shop : coffees),
+    }));
+    const source = { kind: "preview" as const, base: `https://sandbox.withflowra.com/api/v1/${W}`, key: K };
+    await getCoffeeBySlug(shop.data.coffees[0].slug, source);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [url, init] of fetchMock.mock.calls) {
+      expect(url.startsWith(`https://sandbox.withflowra.com/api/v1/${W}/`)).toBe(true);
+      expect(init.cache).toBe("no-store");
+      expect(init.next).toBeUndefined();
+    }
+    expect(request.draftMode).not.toHaveBeenCalled();
+  });
+
   it("Draft Mode without a readable preview cookie leaves preview before any read", async () => {
     request.draft = true;
     for (const cookie of [undefined, "garbage", `${W}.short`]) {
