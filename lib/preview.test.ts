@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  decodePreviewCookie, encodePreviewCookie, isDashboardOrigin, parseStartForm, previewApiBase,
+  decodePreviewCookie, encodePreviewCookie, isDashboardOrigin, parseStartForm, previewApiBase, previewCookieBase,
   previewMaxAge, probePreview, sandboxOrigin,
 } from "./preview";
 
@@ -52,6 +52,14 @@ describe("previewMaxAge", () => {
     expect(previewMaxAge(null, NOW)).toBe(3600);
     expect(previewMaxAge("not a date", NOW)).toBe(3600);
   });
+  it("only ISO 8601 is read; looser date formats count as unreadable", () => {
+    for (const x of ["Oct 10 2026 10:05:00 UTC", "2026-10-10", "10/10/2026", "1791626700000", "2026-10-10 10:05:00Z"]) {
+      expect(previewMaxAge(x, NOW)).toBe(3600);
+    }
+    expect(previewMaxAge("2026-10-10T10:05:00Z", NOW)).toBe(300);
+    expect(previewMaxAge("2026-10-10T10:05:00.500+00:00", NOW)).toBe(300);
+    expect(previewMaxAge("2026-10-10T10:05Z", NOW)).toBe(300);
+  });
 });
 
 describe("preview cookie", () => {
@@ -75,6 +83,11 @@ describe("sandboxOrigin", () => {
     vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", "http://localhost:3000/some/path/");
     expect(previewApiBase(W)).toBe(`http://localhost:3000/api/v1/${W}`);
   });
+  it("refuses a workspace that is not a sandbox slug", () => {
+    for (const w of ["kala", "sb-short", "sb-Abc123XYZ0/../x", "", "sb-Abc123XYZ0?x=1"]) {
+      expect(() => previewApiBase(w)).toThrow();
+    }
+  });
   it("an unusable env value falls back to the default", () => {
     for (const v of ["not a url", "javascript:alert(1)", "ftp://sandbox.withflowra.com"]) {
       vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", v);
@@ -93,9 +106,32 @@ describe("isDashboardOrigin", () => {
   });
 });
 
+describe("previewCookieBase", () => {
+  it("secure everywhere except development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(previewCookieBase().secure).toBe(false);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(previewCookieBase().secure).toBe(true);
+    vi.stubEnv("NODE_ENV", "test");
+    expect(previewCookieBase().secure).toBe(true);
+  });
+});
+
+describe("isDashboardOrigin with a custom origin", () => {
+  it("matches the exact origin including port", () => {
+    vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", "http://localhost:3005");
+    expect(isDashboardOrigin("http://localhost:3005")).toBe(true);
+    expect(isDashboardOrigin("http://localhost:3006")).toBe(false);
+    expect(isDashboardOrigin("http://localhost")).toBe(false);
+  });
+});
+
 describe("probePreview", () => {
+  beforeEach(() => {
+    vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", "");
+  });
   it("reads /_meta of that workspace with the key, never from cache", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) });
     vi.stubGlobal("fetch", fetchMock);
     expect(await probePreview({ workspace: W, key: K })).toBe(true);
     const [url, init] = fetchMock.mock.calls[0];
@@ -103,6 +139,18 @@ describe("probePreview", () => {
     expect(init.headers).toEqual({ Authorization: `Bearer ${K}` });
     expect(init.cache).toBe("no-store");
     expect(init.next).toBeUndefined();
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+  it("a 2xx that is not JSON is a no", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => { throw new SyntaxError("Unexpected token <"); },
+    }));
+    expect(await probePreview({ workspace: W, key: K })).toBe(false);
+  });
+  it("a 2xx with a JSON body is a yes", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ name: "x" }) }));
+    expect(await probePreview({ workspace: W, key: K })).toBe(true);
   });
   it("a rejected key or a network failure is a no", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401 }));

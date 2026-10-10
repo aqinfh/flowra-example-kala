@@ -26,6 +26,8 @@ const WORKSPACE = /^sb-[A-Za-z0-9]{10}$/;
 const KEY = /^cms_[A-Za-z0-9_-]{43}$/;
 const COOKIE_VALUE = /^(sb-[A-Za-z0-9]{10})\.(cms_[A-Za-z0-9_-]{43})$/;
 const PROBE_TIMEOUT_MS = 5000;
+// Expiry arrives as ISO 8601 only; Date.parse alone accepts many looser formats.
+const ISO_EXPIRY = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})$/;
 
 export type PreviewCredentials = { workspace: string; key: string };
 export type PreviewStart = ({ ok: true; maxAge: number } & PreviewCredentials) | { ok: false };
@@ -48,6 +50,8 @@ export function sandboxOrigin(): string {
 }
 
 export function previewApiBase(workspace: string): string {
+  // Defense in depth: never build a URL from an unchecked workspace.
+  if (!WORKSPACE.test(workspace)) throw new Error("Invalid sandbox workspace");
   return `${sandboxOrigin()}/api/v1/${workspace}`;
 }
 
@@ -57,7 +61,7 @@ export function previewApiBase(workspace: string): string {
  * an expired key anyway); an expiry in the past means there is nothing to start.
  */
 export function previewMaxAge(expiresAt: string | null, now: number): number {
-  if (!expiresAt) return PREVIEW_MAX_AGE_SECONDS;
+  if (!expiresAt || !ISO_EXPIRY.test(expiresAt)) return PREVIEW_MAX_AGE_SECONDS;
   const at = Date.parse(expiresAt);
   if (Number.isNaN(at)) return PREVIEW_MAX_AGE_SECONDS;
   return Math.min(PREVIEW_MAX_AGE_SECONDS, Math.floor((at - now) / 1000));
@@ -115,7 +119,11 @@ export async function probePreview({ workspace, key }: PreviewCredentials): Prom
       cache: "no-store",
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
-    return res.ok;
+    if (!res.ok) return false;
+    // Must be JSON (an HTML page from a proxy or captive portal is not the API);
+    // reading the body also releases the connection.
+    await res.json();
+    return true;
   } catch {
     return false;
   }
