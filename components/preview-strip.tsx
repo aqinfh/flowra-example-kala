@@ -1,4 +1,5 @@
 import { draftMode } from "next/headers";
+import { PREVIEW_BAND_CLASS } from "@/lib/preview-notice";
 
 /**
  * Shown only while a sandbox preview is on, directly under the honesty strip
@@ -12,7 +13,7 @@ export async function PreviewStrip() {
   const { isEnabled } = await draftMode();
   if (!isEnabled) return null;
   return (
-    <div role="status" className="border-t border-dotted border-paper/40 bg-ink px-4 py-2 text-center text-xs text-paper">
+    <div role="status" className={PREVIEW_BAND_CLASS}>
       <p>
         You&apos;re previewing your sandbox ·{" "}
         <a className="font-semibold underline underline-offset-2" href="/preview" rel="nofollow">

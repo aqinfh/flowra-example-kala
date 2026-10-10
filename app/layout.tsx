@@ -43,9 +43,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="flex min-h-full flex-col">
         <SampleBanner />
         <PreviewStrip />
-        <Suspense fallback={null}>
-          <PreviewNotice />
-        </Suspense>
+        <div role="status" aria-live="polite">
+          <Suspense fallback={null}>
+            <PreviewNotice />
+          </Suspense>
+        </div>
         <SiteHeader />
         <main className="mx-auto w-full max-w-6xl flex-1 px-5 pt-10 sm:px-8">{children}</main>
         <SiteFooter />

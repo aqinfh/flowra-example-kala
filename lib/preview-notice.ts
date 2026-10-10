@@ -11,3 +11,6 @@ export const PREVIEW_NOTICES = {
 export function previewNotice(value: string | null): string | null {
   return value === "ended" || value === "failed" ? PREVIEW_NOTICES[value] : null;
 }
+
+/** The ink band shared by the preview strip and the preview notice. */
+export const PREVIEW_BAND_CLASS = "border-t border-dotted border-paper/40 bg-ink px-4 py-2 text-center text-xs text-paper";
