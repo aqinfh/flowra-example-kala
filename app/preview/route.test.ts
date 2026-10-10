@@ -59,7 +59,7 @@ describe("POST /preview", () => {
     expect(next.enable).toHaveBeenCalledTimes(1);
     expect(next.set).toHaveBeenCalledTimes(1);
     const [name, value, options] = next.set.mock.calls[0];
-    expect(name).toBe("kala_preview");
+    expect(name).toBe("__Host-kala_preview");
     expect(value).toBe(`${W}.${K}`);
     expect(options).toMatchObject({ httpOnly: true, secure: true, sameSite: "lax", path: "/" });
     expect(options.maxAge).toBeGreaterThan(1790);
@@ -132,7 +132,7 @@ describe("GET /preview", () => {
     expect(res.headers.get("location")).toBe(location);
     expect(next.disable).toHaveBeenCalledTimes(1);
     expect(next.delete).toHaveBeenCalledTimes(1);
-    expect(next.delete).toHaveBeenCalledWith(expect.objectContaining({ name: "kala_preview", httpOnly: true, secure: true, sameSite: "lax", path: "/" }));
+    expect(next.delete).toHaveBeenCalledWith(expect.objectContaining({ name: "__Host-kala_preview", httpOnly: true, secure: true, sameSite: "lax", path: "/" }));
     expectNothingStarted();
     expect(fetchMock).not.toHaveBeenCalled();
   }

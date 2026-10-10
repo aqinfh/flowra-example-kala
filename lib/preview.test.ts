@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  decodePreviewCookie, encodePreviewCookie, isDashboardOrigin, parseStartForm, previewApiBase, previewCookieBase,
+  decodePreviewCookie, encodePreviewCookie, isDashboardOrigin, parseStartForm, previewApiBase, previewCookieBase, previewCookieName,
   previewMaxAge, probePreview, sandboxOrigin,
 } from "./preview";
 
@@ -88,6 +88,16 @@ describe("sandboxOrigin", () => {
       expect(() => previewApiBase(w)).toThrow();
     }
   });
+  it("production accepts https only; http is for development and tests", () => {
+    vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", "http://localhost:3000");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(sandboxOrigin()).toBe("https://sandbox.withflowra.com");
+    vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", "https://sandbox.example.test");
+    expect(sandboxOrigin()).toBe("https://sandbox.example.test");
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", "http://localhost:3000");
+    expect(sandboxOrigin()).toBe("http://localhost:3000");
+  });
   it("an unusable env value falls back to the default", () => {
     for (const v of ["not a url", "javascript:alert(1)", "ftp://sandbox.withflowra.com"]) {
       vi.stubEnv("FLOWRA_SANDBOX_API_ORIGIN", v);
@@ -103,6 +113,17 @@ describe("isDashboardOrigin", () => {
     for (const o of [null, "null", "https://evil.example", "https://sandbox.withflowra.com.evil.example", "http://sandbox.withflowra.com", "https://sandbox.withflowra.com/"]) {
       expect(isDashboardOrigin(o)).toBe(false);
     }
+  });
+});
+
+describe("previewCookieName", () => {
+  it("__Host- prefixed wherever the cookie is Secure, plain in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    expect(previewCookieName()).toBe("kala_preview");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(previewCookieName()).toBe("__Host-kala_preview");
+    expect(previewCookieBase()).toMatchObject({ secure: true, path: "/" });
+    expect(previewCookieBase()).not.toHaveProperty("domain");
   });
 });
 

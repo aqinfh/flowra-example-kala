@@ -14,7 +14,7 @@
  */
 import "server-only";
 
-export const PREVIEW_COOKIE = "kala_preview";
+const PREVIEW_COOKIE_BASE_NAME = "kala_preview";
 /** Flowra preview keys live one hour at most, and so does the cookie. */
 export const PREVIEW_MAX_AGE_SECONDS = 60 * 60;
 export const DEFAULT_SANDBOX_ORIGIN = "https://sandbox.withflowra.com";
@@ -32,17 +32,34 @@ const ISO_EXPIRY = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d
 export type PreviewCredentials = { workspace: string; key: string };
 export type PreviewStart = ({ ok: true; maxAge: number } & PreviewCredentials) | { ok: false };
 
+/** Secure cookies (everything except local development) use the Next.js Draft Mode rule. */
+function cookieIsSecure(): boolean {
+  return process.env.NODE_ENV !== "development";
+}
+
+/**
+ * The one name of the preview cookie. Where the cookie is Secure it carries the
+ * `__Host-` prefix, so a sibling subdomain cannot plant its own with
+ * `Domain=...`; browsers reject that prefix without Secure, so local
+ * development keeps the plain name. Set, read and delete all go through here.
+ */
+export function previewCookieName(): string {
+  return cookieIsSecure() ? `__Host-${PREVIEW_COOKIE_BASE_NAME}` : PREVIEW_COOKIE_BASE_NAME;
+}
+
 /**
  * Origin of the Flowra sandbox instance: the API host for preview reads and
  * the only page allowed to start a preview. Anything that is not an http(s)
- * URL falls back to the default rather than to a request value.
+ * URL falls back to the default rather than to a request value. In production
+ * only https is accepted.
  */
 export function sandboxOrigin(): string {
   const raw = process.env.FLOWRA_SANDBOX_API_ORIGIN?.trim();
   if (!raw) return DEFAULT_SANDBOX_ORIGIN;
   try {
     const url = new URL(raw);
-    if (url.protocol === "https:" || url.protocol === "http:") return url.origin;
+    if (url.protocol === "https:") return url.origin;
+    if (url.protocol === "http:" && process.env.NODE_ENV !== "production") return url.origin;
   } catch {
     // fall through to the default
   }
@@ -101,7 +118,7 @@ export function previewCookieBase() {
   return {
     httpOnly: true as const,
     // Same rule Next.js uses for its own Draft Mode cookie.
-    secure: process.env.NODE_ENV !== "development",
+    secure: cookieIsSecure(),
     sameSite: "lax" as const,
     path: "/" as const,
   };

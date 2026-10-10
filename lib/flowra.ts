@@ -20,7 +20,7 @@
 import "server-only";
 import { cookies, draftMode } from "next/headers";
 import { redirect } from "next/navigation";
-import { decodePreviewCookie, PREVIEW_COOKIE, PREVIEW_ENDED_PATH, previewApiBase } from "./preview";
+import { decodePreviewCookie, previewCookieName, PREVIEW_ENDED_PATH, previewApiBase } from "./preview";
 
 // width/height are present on entry images but absent on the images in /_meta.
 export type FlowraImage = { url: string; w400: string; w1200: string; width?: number; height?: number };
@@ -84,7 +84,7 @@ function publicConfig() {
 export async function currentSource(): Promise<Source> {
   const { isEnabled } = await draftMode();
   if (!isEnabled) return PUBLIC_SOURCE;
-  const preview = decodePreviewCookie((await cookies()).get(PREVIEW_COOKIE)?.value);
+  const preview = decodePreviewCookie((await cookies()).get(previewCookieName())?.value);
   if (!preview) redirect(PREVIEW_ENDED_PATH);
   return { kind: "preview", base: previewApiBase(preview.workspace), key: preview.key };
 }

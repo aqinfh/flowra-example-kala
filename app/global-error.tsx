@@ -8,6 +8,10 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
         <button type="button" onClick={reset} style={{ marginTop: "1.5rem", padding: "0.5rem 1.25rem", borderRadius: 999, border: "1px solid #a3a3a3", background: "transparent" }}>
           Try again
         </button>
+        <p style={{ marginTop: "1.5rem", fontSize: "0.875rem" }}>
+          {/* Plain anchor on purpose: nothing prefetches it, and it works when the app shell is broken. */}
+          Previewing your sandbox? <a href="/preview" style={{ textDecoration: "underline" }}>Exit preview</a>
+        </p>
       </body>
     </html>
   );

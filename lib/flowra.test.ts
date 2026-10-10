@@ -29,7 +29,7 @@ beforeEach(() => {
   request.cookie = undefined;
   request.draftMode.mockReset().mockImplementation(async () => ({ isEnabled: request.draft }));
   request.cookies.mockReset().mockImplementation(async () => ({
-    get: (name: string) => (name === "kala_preview" && request.cookie !== undefined ? { name, value: request.cookie } : undefined),
+    get: (name: string) => (name === "__Host-kala_preview" && request.cookie !== undefined ? { name, value: request.cookie } : undefined),
   }));
 });
 

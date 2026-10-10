@@ -1,6 +1,6 @@
 import { cookies, draftMode } from "next/headers";
 import {
-  encodePreviewCookie, isDashboardOrigin, parseStartForm, PREVIEW_COOKIE, previewCookieBase, probePreview,
+  encodePreviewCookie, isDashboardOrigin, parseStartForm, previewCookieName, previewCookieBase, probePreview,
 } from "@/lib/preview";
 
 /**
@@ -38,13 +38,13 @@ export async function POST(request: Request): Promise<Response> {
   if (!(await probePreview(start))) return seeOther(START_FAILED);
 
   (await draftMode()).enable();
-  (await cookies()).set(PREVIEW_COOKIE, encodePreviewCookie(start), { ...previewCookieBase(), maxAge: start.maxAge });
+  (await cookies()).set(previewCookieName(), encodePreviewCookie(start), { ...previewCookieBase(), maxAge: start.maxAge });
   return seeOther(HOME);
 }
 
 export async function GET(request: Request): Promise<Response> {
   const ended = new URL(request.url).searchParams.get("ended") === "1";
   (await draftMode()).disable();
-  (await cookies()).delete({ name: PREVIEW_COOKIE, ...previewCookieBase() });
+  (await cookies()).delete({ name: previewCookieName(), ...previewCookieBase() });
   return seeOther(ended ? ENDED : HOME);
 }
