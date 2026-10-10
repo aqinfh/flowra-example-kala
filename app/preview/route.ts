@@ -17,7 +17,7 @@ const HOME = "/";
 const START_FAILED = "/?preview=failed";
 const ENDED = "/?preview=ended";
 
-// No caching anywhere, and no Referer from the page this redirect lands on.
+// No caching anywhere, and no Referer on the redirected request.
 function seeOther(location: string): Response {
   return new Response(null, {
     status: 303,

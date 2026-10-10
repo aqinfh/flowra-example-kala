@@ -96,8 +96,23 @@ describe("POST /preview", () => {
   it("a key the sandbox rejects (expired, other workspace): refused, no cookie", async () => {
     fetchMock.mockResolvedValue({ ok: false, status: 404 });
     const res = await start({ w: W, k: K });
+    expectNoLeak(res);
     expect(res.headers.get("location")).toBe("/?preview=failed");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     expectNothingStarted();
+  });
+
+  it("an unreadable body from the dashboard: refused, nothing set, nothing fetched", async () => {
+    for (const headers of [
+      { origin: DASHBOARD, "content-type": "multipart/form-data; boundary=x" },
+      { origin: DASHBOARD, "content-type": "text/plain" },
+    ]) {
+      const res = await POST(new Request("https://kala.withflowra.com/preview", { method: "POST", headers, body: "garbage" }));
+      expectNoLeak(res);
+      expect(res.headers.get("location")).toBe("/?preview=failed");
+    }
+    expectNothingStarted();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("the API host cannot be steered from the request", async () => {
@@ -111,22 +126,26 @@ describe("POST /preview", () => {
 });
 
 describe("GET /preview", () => {
-  it("ends the preview: Draft Mode off, cookie cleared, home page", async () => {
-    const res = await GET(new Request("https://kala.withflowra.com/preview"));
+  async function expectExit(url: string, location: string) {
+    const res = await GET(new Request(url));
     expectNoLeak(res);
-    expect(res.headers.get("location")).toBe("/");
+    expect(res.headers.get("location")).toBe(location);
     expect(next.disable).toHaveBeenCalledTimes(1);
-    expect(next.delete).toHaveBeenCalledWith(expect.objectContaining({ name: "kala_preview", path: "/" }));
+    expect(next.delete).toHaveBeenCalledTimes(1);
+    expect(next.delete).toHaveBeenCalledWith(expect.objectContaining({ name: "kala_preview", httpOnly: true, secure: true, sameSite: "lax", path: "/" }));
+    expectNothingStarted();
+    expect(fetchMock).not.toHaveBeenCalled();
+  }
+
+  it("ends the preview: Draft Mode off, cookie cleared, home page", async () => {
+    await expectExit("https://kala.withflowra.com/preview", "/");
   });
 
-  it("?ended=1 lands on the home page with the ended notice", async () => {
-    const res = await GET(new Request("https://kala.withflowra.com/preview?ended=1"));
-    expect(res.headers.get("location")).toBe("/?preview=ended");
+  it("?ended=1 also switches Draft Mode off and clears the cookie, then shows the ended notice", async () => {
+    await expectExit("https://kala.withflowra.com/preview?ended=1", "/?preview=ended");
   });
 
   it("never starts a preview, even with credentials in the query string", async () => {
-    await GET(new Request(`https://kala.withflowra.com/preview?w=${W}&k=${K}`));
-    expectNothingStarted();
-    expect(fetchMock).not.toHaveBeenCalled();
+    await expectExit(`https://kala.withflowra.com/preview?w=${W}&k=${K}`, "/");
   });
 });
