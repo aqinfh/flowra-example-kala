@@ -5,14 +5,15 @@ import Link from "next/link";
 import { Photo } from "@/components/photo";
 import { ArrowLeft } from "@/components/icons";
 import { Rail, Ticket, TicketTitle } from "@/components/ticket";
-import { getArticleBySlug, listJournal } from "@/lib/flowra";
+import { getArticleBySlug, listJournal, PUBLIC_SOURCE } from "@/lib/flowra";
 import { RichText } from "@/components/rich-text";
 
 export const revalidate = 60;
 export const dynamicParams = true;
 
+// Build time has no request, so no Draft Mode: always the public workspace.
 export async function generateStaticParams() {
-  const slugs = (await listJournal()).map((a) => a.slug).filter(Boolean);
+  const slugs = (await listJournal(100, PUBLIC_SOURCE)).map((a) => a.slug).filter(Boolean);
   return [...new Set(slugs)].map((slug) => ({ slug }));
 }
 

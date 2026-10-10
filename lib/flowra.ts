@@ -11,9 +11,16 @@
  *
  * Lists stop at 100 entries (the API's maximum page size); paginate with
  * `offset` if you have more.
+ *
+ * Sandbox preview: when Draft Mode is on (started by POST /preview, see
+ * lib/preview.ts), every read goes to the visitor's Flowra sandbox with its
+ * temporary key and is never cached. The preview cookie is read only while
+ * Draft Mode is on, so public pages stay static and never depend on it.
  */
 import "server-only";
-
+import { cookies, draftMode } from "next/headers";
+import { redirect } from "next/navigation";
+import { decodePreviewCookie, PREVIEW_COOKIE, PREVIEW_ENDED_PATH, previewApiBase } from "./preview";
 
 // width/height are present on entry images but absent on the images in /_meta.
 export type FlowraImage = { url: string; w400: string; w1200: string; width?: number; height?: number };
@@ -54,19 +61,55 @@ const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 const image = (v: unknown): FlowraImage | null =>
   v && typeof v === "object" && typeof (v as Json).url === "string" ? (v as FlowraImage) : null;
 
-function config() {
+/** Where a read goes: the public demo workspace, or a sandbox being previewed. */
+export type Source = { kind: "public" } | { kind: "preview"; base: string; key: string };
+export const PUBLIC_SOURCE: Source = { kind: "public" };
+
+function publicConfig() {
   const base = process.env.FLOWRA_API_URL ?? "https://demo.withflowra.com/api/v1/kala";
   const key = process.env.FLOWRA_API_KEY;
   if (!key) throw new Error("FLOWRA_API_KEY is not set. Copy .env.example to .env.local.");
   return { base: base.replace(/\/$/, ""), key };
 }
 
-async function get<T = Json>(path: string): Promise<T> {
-  const { base, key } = config();
-  const res = await fetch(`${base}${path}`, {
-    headers: { Authorization: `Bearer ${key}` },
-    next: { revalidate: 60, tags: ["flowra"] },
-  });
+/**
+ * The source for the current request. Outside Draft Mode this never touches
+ * cookies, which keeps static and ISR pages static. Draft Mode without a
+ * readable preview cookie (the cookie expired before the browser session
+ * ended) sends the browser to /preview?ended=1, which switches Draft Mode off.
+ *
+ * Not for generateStaticParams: it runs at build time, where draftMode()
+ * throws. Pass PUBLIC_SOURCE there.
+ */
+export async function currentSource(): Promise<Source> {
+  const { isEnabled } = await draftMode();
+  if (!isEnabled) return PUBLIC_SOURCE;
+  const preview = decodePreviewCookie((await cookies()).get(PREVIEW_COOKIE)?.value);
+  if (!preview) redirect(PREVIEW_ENDED_PATH);
+  return { kind: "preview", base: previewApiBase(preview.workspace), key: preview.key };
+}
+
+/** URL and fetch options for one read. Preview reads are never cached or tagged. */
+export function requestFor(source: Source, path: string): { url: string; init: RequestInit } {
+  if (source.kind === "preview") {
+    return {
+      url: `${source.base}${path}`,
+      init: { headers: { Authorization: `Bearer ${source.key}` }, cache: "no-store" },
+    };
+  }
+  const { base, key } = publicConfig();
+  return {
+    url: `${base}${path}`,
+    init: { headers: { Authorization: `Bearer ${key}` }, next: { revalidate: 60, tags: ["flowra"] } },
+  };
+}
+
+async function get<T = Json>(path: string, source?: Source): Promise<T> {
+  const src = source ?? (await currentSource());
+  const { url, init } = requestFor(src, path);
+  const res = await fetch(url, init);
+  // The preview key expired or its sandbox was reset: leave preview with a notice.
+  if (src.kind === "preview" && res.status === 401) redirect(PREVIEW_ENDED_PATH);
   if (!res.ok) throw new FlowraError(res.status, path);
   try {
     return (await res.json()) as T;
@@ -162,25 +205,28 @@ export function mapCoffeeDetail(slug: string, shop: ShopCoffee[], coffeesJson: u
 }
 
 // ---- data functions used by pages ----
+// `source` is optional: pages leave it out and get the current request's
+// source; generateStaticParams passes PUBLIC_SOURCE.
 
-export async function getMeta(): Promise<Meta> { return mapMeta(await get("/_meta")); }
-export async function getHome(): Promise<Home> { return mapHome(await get("/e/home")); }
-export async function getShop(): Promise<ShopCoffee[]> { return mapShop(await get("/e/shop")); }
+export async function getMeta(source?: Source): Promise<Meta> { return mapMeta(await get("/_meta", source)); }
+export async function getHome(source?: Source): Promise<Home> { return mapHome(await get("/e/home", source)); }
+export async function getShop(source?: Source): Promise<ShopCoffee[]> { return mapShop(await get("/e/shop", source)); }
 
-export async function getCoffeeBySlug(slug: string): Promise<CoffeeDetail | null> {
-  const [shop, coffees] = await Promise.all([getShop(), get("/coffees?limit=100")]);
+export async function getCoffeeBySlug(slug: string, source?: Source): Promise<CoffeeDetail | null> {
+  const src = source ?? (await currentSource());
+  const [shop, coffees] = await Promise.all([getShop(src), get("/coffees?limit=100", src)]);
   return mapCoffeeDetail(slug, shop, coffees);
 }
 
 // Explicit sort on journal: the default changes if an editor turns on manual ordering.
-export async function listJournal(limit = 100): Promise<Article[]> {
-  return mapList(await get(`/journal?limit=${limit}&sort=publishedAt&order=desc`), mapArticle);
+export async function listJournal(limit = 100, source?: Source): Promise<Article[]> {
+  return mapList(await get(`/journal?limit=${limit}&sort=publishedAt&order=desc`, source), mapArticle);
 }
 
-export async function getArticleBySlug(slug: string): Promise<Article | null> {
+export async function getArticleBySlug(slug: string, source?: Source): Promise<Article | null> {
   // Flowra slug fields are not unique addresses, so look the slug up in the list.
-  return findBySlug(await listJournal(), slug);
+  return findBySlug(await listJournal(100, source), slug);
 }
 
-export async function listCafes(): Promise<Cafe[]> { return mapList(await get("/cafes"), mapCafe); }
-export async function listTeam(): Promise<TeamMember[]> { return mapList(await get("/team"), mapTeamMember); }
+export async function listCafes(source?: Source): Promise<Cafe[]> { return mapList(await get("/cafes", source), mapCafe); }
+export async function listTeam(source?: Source): Promise<TeamMember[]> { return mapList(await get("/team", source), mapTeamMember); }

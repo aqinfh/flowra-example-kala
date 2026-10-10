@@ -5,13 +5,14 @@ import { Photo } from "@/components/photo";
 import { RichText } from "@/components/rich-text";
 import { ArrowLeft } from "@/components/icons";
 import { LineItem, Ticket, TicketTitle } from "@/components/ticket";
-import { getCoffeeBySlug, getShop } from "@/lib/flowra";
+import { getCoffeeBySlug, getShop, PUBLIC_SOURCE } from "@/lib/flowra";
 
 export const revalidate = 60;
 export const dynamicParams = true;
 
+// Build time has no request, so no Draft Mode: always the public workspace.
 export async function generateStaticParams() {
-  const slugs = (await getShop()).map((c) => c.slug).filter(Boolean);
+  const slugs = (await getShop(PUBLIC_SOURCE)).map((c) => c.slug).filter(Boolean);
   return [...new Set(slugs)].map((slug) => ({ slug }));
 }
 
