@@ -251,6 +251,8 @@ Article bodies use Body Long. Links are underlined in steel and darken to ink on
 ### Bands
 The honesty strip on top and the footer below are solid ink bands with paper text (footer secondary text at 75 to 80% paper), the only places the page leaves the wall.
 
+While a Flowra sandbox preview is on, one more ink line hangs directly under the honesty strip, split from it by a dotted paper rule: "You're previewing your sandbox · Exit preview". The one-line preview notices (the preview ended, the preview could not start) use the same line. Nothing else joins the band.
+
 ### Motion
 - **Print-out:** a ticket marked to print reveals top to bottom in 18 discrete steps over 1.1s, once, on first appearance (the hero, a coffee detail, an article).
 - **Straighten:** a tilted ticket rotates to true on hover or focus in 0.45s on `cubic-bezier(0.22, 1, 0.36, 1)`, pivoting from its clip.

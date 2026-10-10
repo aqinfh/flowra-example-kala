@@ -19,12 +19,12 @@ Then open http://localhost:3000. The `.env.example` file already has the public 
 `lib/flowra.ts` is the only file that calls the API. Pages import its functions (`getHome`, `getShop`, `listJournal` and so on) and never read the env vars themselves, so the key stays on the server. The core of it is `get()`:
 
 ```ts
-async function get<T = Json>(path: string): Promise<T> {
-  const { base, key } = config();
-  const res = await fetch(`${base}${path}`, {
-    headers: { Authorization: `Bearer ${key}` },
-    next: { revalidate: 60, tags: ["flowra"] },
-  });
+async function get<T = Json>(path: string, source?: Source): Promise<T> {
+  const src = source ?? (await currentSource());
+  const { url, init } = requestFor(src, path);
+  const res = await fetch(url, init);
+  // The preview key expired or its sandbox was reset: leave preview with a notice.
+  if (src.kind === "preview" && res.status === 401) redirect(PREVIEW_ENDED_PATH);
   if (!res.ok) throw new FlowraError(res.status, path);
   try {
     return (await res.json()) as T;
@@ -34,13 +34,19 @@ async function get<T = Json>(path: string): Promise<T> {
 }
 ```
 
-Every response is cached for 60 seconds and tagged `flowra`. Lists stop at 100 entries (the API's maximum page size); paginate with `offset` if you have more. The site reads two endpoints composed in the Flowra dashboard (`/e/home` and `/e/shop`), the resource lists `/journal`, `/cafes`, `/team` and `/coffees`, and `/_meta` for SEO settings.
+For the public workspace, `requestFor()` adds `next: { revalidate: 60, tags: ["flowra"] }`, so every response is cached for 60 seconds and tagged `flowra`. Lists stop at 100 entries (the API's maximum page size); paginate with `offset` if you have more. The site reads two endpoints composed in the Flowra dashboard (`/e/home` and `/e/shop`), the resource lists `/journal`, `/cafes`, `/team` and `/coffees`, and `/_meta` for SEO settings.
 
 ## Instant updates with a webhook
 
 Without a webhook, cached responses are refreshed in the background once they are older than 60 seconds (stale-while-revalidate). The first visitor after that window may see the old copy, and later visitors get the new content. If you want edits to show up right away, add a webhook in your Flowra workspace that points to `/api/revalidate` on your deployed site, and set `FLOWRA_WEBHOOK_SECRET` to the secret Flowra shows you.
 
 Flowra signs each request with an `x-cms-signature` header, in the form `sha256=<hex>`, where the hex value is an HMAC-SHA256 of the raw request body using that secret. The route checks it (`lib/webhook.ts`) and, if it matches, drops the `flowra` cache tag with `revalidateTag("flowra", { expire: 0 })`, so the next request after publishing gets fresh content. It answers 503 if the secret isn't set and 401 if the signature is wrong.
+
+## Sandbox preview
+
+Visitors who try the Flowra dashboard get their own copy of the Kala workspace on sandbox.withflowra.com. Its "Preview website" button posts a short-lived, read-only key to `/preview` on this site. It is a form POST, so the key never appears in a URL. `app/preview/route.ts` checks that the post came from the sandbox dashboard, that the workspace and key have the right shape and that the key opens the workspace, then turns on Next.js Draft Mode and keeps the workspace and key in an httpOnly cookie for an hour at most.
+
+While Draft Mode is on, `lib/flowra.ts` reads from `FLOWRA_SANDBOX_API_ORIGIN/api/v1/<workspace>` with `cache: "no-store"`, and Next.js serves those pages with `Cache-Control: private, no-store`. Everyone else keeps getting the cached public pages. "Exit preview", or a key that has expired, clears the cookie and switches Draft Mode off.
 
 ## Notes
 

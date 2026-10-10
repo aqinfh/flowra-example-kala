@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Archivo, Martian_Mono } from "next/font/google";
+import { Suspense } from "react";
+import { PreviewNotice } from "@/components/preview-notice";
+import { PreviewStrip } from "@/components/preview-strip";
 import { SampleBanner } from "@/components/sample-banner";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -39,6 +42,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col">
         <SampleBanner />
+        <PreviewStrip />
+        <Suspense fallback={null}>
+          <PreviewNotice />
+        </Suspense>
         <SiteHeader />
         <main className="mx-auto w-full max-w-6xl flex-1 px-5 pt-10 sm:px-8">{children}</main>
         <SiteFooter />
